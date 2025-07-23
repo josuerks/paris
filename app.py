@@ -17,15 +17,18 @@ DATA = {
     "USERS": "users.json"
 }
 
-# Créer les fichiers vides si absents
+# Créer les fichiers vides si absents (avec contenu JSON valide)
 for f in DATA.values():
     if not os.path.exists(f):
         with open(f, "w") as fp:
-            json.dump([], fp)
+            fp.write("[]")  # fichier JSON vide valide
 
 # ---------- OUTILS ----------
 def load(path):
-    with open(path) as fp:
+    # Si fichier absent ou vide, retourner liste vide
+    if not os.path.exists(path) or os.stat(path).st_size == 0:
+        return []
+    with open(path, "r") as fp:
         return json.load(fp)
 
 def save(path, data):
