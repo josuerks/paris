@@ -33,6 +33,11 @@ def user_obj(name):
     users = load(DATA["USERS"])
     return next((u for u in users if u["nom"] == name), None)
 
+# ---------- ROUTE ACCUEIL ----------
+@app.route('/')
+def home():
+    return "Serveur Paris actif !"
+
 # ---------- PUBLICITÉ ----------
 @app.route("/send_pub", methods=["POST"])
 def send_pub():
