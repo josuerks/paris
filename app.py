@@ -48,7 +48,7 @@ def home():
 @app.route("/send_pub", methods=["POST"])
 def send_pub():
     msg = request.json.get("message", "")
-    socketio.emit("pub", msg, broadcast=True)
+    socketio.emit("pub", msg)  # plus de broadcast=True
     return {"ok": True}
 
 # ---------- INSCRIPTION UTILISATEUR ----------
@@ -101,7 +101,7 @@ def add_match():
     new_match = {"id": m_id, "equipe1": d["equipe1"], "equipe2": d["equipe2"]}
     matchs.append(new_match)
     save(DATA["MATCHS"], matchs)
-    socketio.emit("pub", "Nouveau match disponible !", broadcast=True)
+    socketio.emit("pub", "Nouveau match disponible !")  # plus de broadcast=True
     return {"match": new_match}, 201
 
 # ---------- LISTER MATCHS ----------
@@ -132,7 +132,7 @@ def add_result():
     resultats = load(DATA["RESULTS"])
     resultats.append(r)
     save(DATA["RESULTS"], resultats)
-    socketio.emit("pub", f"Résultat publié pour {r['match_id']}", broadcast=True)
+    socketio.emit("pub", f"Résultat publié pour {r['match_id']}")  # plus de broadcast=True
     return {"ok": True}
 
 # ---------- RÉSULTATS PAR UTILISATEUR ----------
