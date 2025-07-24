@@ -1,3 +1,5 @@
+# Fichier app.py
+
 import eventlet
 eventlet.monkey_patch()
 
@@ -9,7 +11,6 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = "secret!"
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# ---------- FICHIERS JSON ----------
 DATA = {
     "MATCHS": "matchs.json",
     "PARIS": "paris.json",
@@ -17,13 +18,11 @@ DATA = {
     "USERS": "users.json"
 }
 
-# Créer les fichiers vides si absents
 for f in DATA.values():
     if not os.path.exists(f):
         with open(f, "w") as fp:
             fp.write("[]")
 
-# ---------- OUTILS ----------
 def load(path):
     if not os.path.exists(path) or os.stat(path).st_size == 0:
         return []
@@ -38,19 +37,16 @@ def user_obj(name):
     users = load(DATA["USERS"])
     return next((u for u in users if u["nom"] == name), None)
 
-# ---------- ROUTE ACCUEIL ----------
 @app.route('/')
 def home():
     return "Serveur Paris actif !"
 
-# ---------- PUBLICITÉ / Événement ----------
 @app.route("/send_pub", methods=["POST"])
 def send_pub():
     msg = request.json.get("message", "")
     socketio.emit("pub", msg)
     return {"ok": True}
 
-# ---------- INSCRIPTION ----------
 @app.route("/register", methods=["POST"])
 def register():
     nom = request.json.get("nom", "").strip()
@@ -66,7 +62,6 @@ def register():
     save(DATA["USERS"], users)
     return {"message": f"Bienvenue {nom}"}, 201
 
-# ---------- DÉPÔT D’ARGENT ----------
 @app.route("/deposit", methods=["POST"])
 def deposit():
     nom = request.json.get("nom")
@@ -83,7 +78,6 @@ def deposit():
     save(DATA["USERS"], users)
     return {"message": "Dépôt enregistré", "solde": user}, 200
 
-# ---------- CONSULTER SOLDE ----------
 @app.route("/balance/<nom>")
 def balance(nom):
     user = user_obj(nom)
@@ -91,7 +85,6 @@ def balance(nom):
         return {"error": "Utilisateur inconnu"}, 404
     return {"fc": user["fc"], "usd": user["usd"]}
 
-# ---------- AJOUTER MATCH ----------
 @app.route("/add_match", methods=["POST"])
 def add_match():
     d = request.json
@@ -100,16 +93,13 @@ def add_match():
     new_match = {"id": m_id, "equipe1": d["equipe1"], "equipe2": d["equipe2"]}
     matchs.append(new_match)
     save(DATA["MATCHS"], matchs)
-    # Ici on émet un événement 'new_match' avec l'objet match
     socketio.emit("new_match", new_match)
     return {"match": new_match}, 201
 
-# ---------- LISTER MATCHS ----------
 @app.route("/get_matchs")
 def get_matchs():
     return jsonify(load(DATA["MATCHS"]))
 
-# ---------- PARIER ----------
 @app.route("/parier", methods=["POST"])
 def parier():
     d = request.json
@@ -125,7 +115,6 @@ def parier():
     save(DATA["PARIS"], paris)
     return {"ok": True}
 
-# ---------- AJOUTER RÉSULTAT ----------
 @app.route("/add_resultat", methods=["POST"])
 def add_result():
     r = request.json
@@ -135,7 +124,6 @@ def add_result():
     socketio.emit("pub", f"Résultat publié pour {r['match_id']}")
     return {"ok": True}
 
-# ---------- RÉSULTATS PAR UTILISATEUR ----------
 @app.route("/get_resultat/<user>")
 def get_res(user):
     paris = load(DATA["PARIS"])
@@ -157,7 +145,7 @@ def get_res(user):
                 })
     return jsonify(retour)
 
-# ---------- LANCEMENT DU SERVEUR ----------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port)
+
