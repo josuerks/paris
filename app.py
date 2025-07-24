@@ -17,15 +17,14 @@ DATA = {
     "USERS": "users.json"
 }
 
-# Créer les fichiers vides si absents (avec contenu JSON valide)
+# Créer les fichiers vides si absents
 for f in DATA.values():
     if not os.path.exists(f):
         with open(f, "w") as fp:
-            fp.write("[]")  # fichier JSON vide valide
+            fp.write("[]")
 
 # ---------- OUTILS ----------
 def load(path):
-    # Si fichier absent ou vide, retourner liste vide
     if not os.path.exists(path) or os.stat(path).st_size == 0:
         return []
     with open(path, "r") as fp:
@@ -44,14 +43,14 @@ def user_obj(name):
 def home():
     return "Serveur Paris actif !"
 
-# ---------- PUBLICITÉ ----------
+# ---------- PUBLICITÉ / Événement ----------
 @app.route("/send_pub", methods=["POST"])
 def send_pub():
     msg = request.json.get("message", "")
-    socketio.emit("pub", msg)  # plus de broadcast=True
+    socketio.emit("pub", msg)
     return {"ok": True}
 
-# ---------- INSCRIPTION UTILISATEUR ----------
+# ---------- INSCRIPTION ----------
 @app.route("/register", methods=["POST"])
 def register():
     nom = request.json.get("nom", "").strip()
@@ -101,7 +100,7 @@ def add_match():
     new_match = {"id": m_id, "equipe1": d["equipe1"], "equipe2": d["equipe2"]}
     matchs.append(new_match)
     save(DATA["MATCHS"], matchs)
-    socketio.emit("pub", "Nouveau match disponible !")  # plus de broadcast=True
+    socketio.emit("pub", "Nouveau match disponible !")
     return {"match": new_match}, 201
 
 # ---------- LISTER MATCHS ----------
@@ -132,7 +131,7 @@ def add_result():
     resultats = load(DATA["RESULTS"])
     resultats.append(r)
     save(DATA["RESULTS"], resultats)
-    socketio.emit("pub", f"Résultat publié pour {r['match_id']}")  # plus de broadcast=True
+    socketio.emit("pub", f"Résultat publié pour {r['match_id']}")
     return {"ok": True}
 
 # ---------- RÉSULTATS PAR UTILISATEUR ----------
