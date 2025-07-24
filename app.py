@@ -100,7 +100,8 @@ def add_match():
     new_match = {"id": m_id, "equipe1": d["equipe1"], "equipe2": d["equipe2"]}
     matchs.append(new_match)
     save(DATA["MATCHS"], matchs)
-    socketio.emit("pub", "Nouveau match disponible !")
+    # Ici on émet un événement 'new_match' avec l'objet match
+    socketio.emit("new_match", new_match)
     return {"match": new_match}, 201
 
 # ---------- LISTER MATCHS ----------
