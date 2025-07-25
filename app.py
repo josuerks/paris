@@ -103,15 +103,36 @@ def get_matchs():
 @app.route("/parier", methods=["POST"])
 def parier():
     d = request.json
-    user = d["user"]
+    user_name = d["user"]
     match_id = d["match_id"]
     choix = d["choix"]
+    devise = d["devise"]  # "usd" ou "fc"
+    montant = int(d["montant"])
+
+    users = load(DATA["USERS"])
+    user = next((u for u in users if u["nom"] == user_name), None)
+    if not user:
+        return {"error": "Utilisateur inconnu"}, 404
+
+    if user[devise] < montant:
+        return {"error": "Solde insuffisant"}, 400
 
     paris = load(DATA["PARIS"])
-    if any(p for p in paris if p["user"] == user and p["match_id"] == match_id):
+    if any(p for p in paris if p["user"] == user_name and p["match_id"] == match_id):
         return {"error": "Déjà parié"}, 400
 
-    paris.append({"user": user, "match_id": match_id, "choix": choix})
+    # Soustraction du montant
+    user[devise] -= montant
+    save(DATA["USERS"], users)
+
+    # Enregistrement du pari
+    paris.append({
+        "user": user_name,
+        "match_id": match_id,
+        "choix": choix,
+        "mise": montant,
+        "devise": devise
+    })
     save(DATA["PARIS"], paris)
     return {"ok": True}
 
@@ -141,11 +162,12 @@ def get_res(user):
                     "match": f'{match["equipe1"]} vs {match["equipe2"]}',
                     "choix": p["choix"],
                     "gagnant": resultat["gagnant"],
-                    "résultat": etat
+                    "résultat": etat,
+                    "mise": p["mise"],
+                    "devise": p["devise"]
                 })
     return jsonify(retour)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port)
-
