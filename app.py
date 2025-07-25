@@ -1,5 +1,3 @@
-# Fichier app.py
-
 import eventlet
 eventlet.monkey_patch()
 
@@ -106,7 +104,7 @@ def parier():
     user_name = d["user"]
     match_id = d["match_id"]
     choix = d["choix"]
-    devise = d["devise"]  # "usd" ou "fc"
+    devise = d["devise"]
     montant = int(d["montant"])
 
     users = load(DATA["USERS"])
@@ -121,11 +119,9 @@ def parier():
     if any(p for p in paris if p["user"] == user_name and p["match_id"] == match_id):
         return {"error": "Déjà parié"}, 400
 
-    # Soustraction du montant
     user[devise] -= montant
     save(DATA["USERS"], users)
 
-    # Enregistrement du pari
     paris.append({
         "user": user_name,
         "match_id": match_id,
@@ -142,6 +138,19 @@ def add_result():
     resultats = load(DATA["RESULTS"])
     resultats.append(r)
     save(DATA["RESULTS"], resultats)
+
+    paris = load(DATA["PARIS"])
+    users = load(DATA["USERS"])
+
+    for p in paris:
+        if p["match_id"] == r["match_id"]:
+            if p["choix"] == r["gagnant"]:
+                user = next((u for u in users if u["nom"] == p["user"]), None)
+                if user:
+                    gain = p["mise"] * 2
+                    user[p["devise"]] += gain
+
+    save(DATA["USERS"], users)
     socketio.emit("pub", f"Résultat publié pour {r['match_id']}")
     return {"ok": True}
 
@@ -171,3 +180,4 @@ def get_res(user):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port)
+
