@@ -13,5 +13,11 @@
     "id": 3,
     "name": "Amazon Prime",
     "price": 2500
+  },
+  {
+    "id": 3,
+    "name": "Amazon Prime",
+    "price": 2500
   }
+	
 ]
