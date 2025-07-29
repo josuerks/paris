@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "name": "Netflix Premium",
+    "price": 3000
+  },
+  {
+    "id": 2,
+    "name": "Canal+ Sport",
+    "price": 5000
+  },
+  {
+    "id": 3,
+    "name": "Amazon Prime",
+    "price": 2500
+  }
+]
