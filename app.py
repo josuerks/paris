@@ -1,26 +1,34 @@
 import eventlet
 eventlet.monkey_patch()
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_socketio import SocketIO
-import json, os
+import json, os, base64, uuid
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "secret!"
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+# Fichiers utilisés
 DATA = {
     "MATCHS": "matchs.json",
     "PARIS": "paris.json",
     "RESULTS": "resultats.json",
-    "USERS": "users.json"
+    "USERS": "users.json",
+    "ARTICLES": "articles.json"
 }
 
+# Initialisation des fichiers
 for f in DATA.values():
     if not os.path.exists(f):
         with open(f, "w") as fp:
             fp.write("[]")
 
+# Création du dossier images
+if not os.path.exists("images"):
+    os.makedirs("images")
+
+# Fonctions utilitaires
 def load(path):
     if not os.path.exists(path) or os.stat(path).st_size == 0:
         return []
@@ -39,6 +47,45 @@ def user_obj(name):
 def home():
     return "Serveur Paris actif !"
 
+# ----- Publication d’article -----
+@app.route("/publish_article", methods=["POST"])
+def publish_article():
+    data = request.json
+    description = data.get("description")
+    prix = data.get("prix")
+    image_b64 = data.get("image")
+
+    if not description or not prix or not image_b64:
+        return {"error": "Champs requis manquants"}, 400
+
+    image_id = str(uuid.uuid4()) + ".jpg"
+    image_path = os.path.join("images", image_id)
+    with open(image_path, "wb") as f:
+        f.write(base64.b64decode(image_b64))
+
+    article = {
+        "id": str(uuid.uuid4()),
+        "description": description,
+        "prix": prix,
+        "image": f"/images/{image_id}"
+    }
+
+    articles = load(DATA["ARTICLES"])
+    articles.append(article)
+    save(DATA["ARTICLES"], articles)
+
+    socketio.emit("new_article", article)
+    return {"ok": True, "article": article}
+
+@app.route("/get_articles")
+def get_articles():
+    return jsonify(load(DATA["ARTICLES"]))
+
+@app.route("/images/<filename>")
+def serve_image(filename):
+    return send_from_directory("images", filename)
+
+# ----- Reste de ton code original -----
 @app.route("/send_pub", methods=["POST"])
 def send_pub():
     msg = request.json.get("message", "")
@@ -180,4 +227,3 @@ def get_res(user):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port)
-
