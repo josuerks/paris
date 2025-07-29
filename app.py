@@ -15,7 +15,8 @@ DATA = {
     "PARIS": "paris.json",
     "RESULTS": "resultats.json",
     "USERS": "users.json",
-    "ARTICLES": "articles.json"
+    "ARTICLES": "articles.json",
+    "SHOP_ITEMS": "shop_items.json"
 }
 
 # Initialisation des fichiers
@@ -84,6 +85,12 @@ def get_articles():
 @app.route("/images/<filename>")
 def serve_image(filename):
     return send_from_directory("images", filename)
+
+# ----- Route manquante pour boutique -----
+@app.route("/shop_items")
+def shop_items():
+    items = load(DATA["SHOP_ITEMS"])
+    return jsonify(items)
 
 # ----- Reste de ton code original -----
 @app.route("/send_pub", methods=["POST"])
@@ -227,3 +234,4 @@ def get_res(user):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port)
+
