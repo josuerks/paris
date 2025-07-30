@@ -3,33 +3,30 @@ eventlet.monkey_patch()
 
 from flask import Flask, request, jsonify, send_from_directory
 from flask_socketio import SocketIO
-import json, os, base64, uuid
+import json, os, base64, time
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "secret!"
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Fichiers utilisés
+# Dossier pour stocker les images publiées
+UPLOAD_FOLDER = "static/images"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Données locales
 DATA = {
     "MATCHS": "matchs.json",
     "PARIS": "paris.json",
     "RESULTS": "resultats.json",
     "USERS": "users.json",
-    "ARTICLES": "articles.json",
-    "SHOP_ITEMS": "shop_items.json"
+    "SHOP": "shop.json"
 }
 
-# Initialisation des fichiers
 for f in DATA.values():
     if not os.path.exists(f):
         with open(f, "w") as fp:
             fp.write("[]")
 
-# Création du dossier images
-if not os.path.exists("images"):
-    os.makedirs("images")
-
-# Fonctions utilitaires
 def load(path):
     if not os.path.exists(path) or os.stat(path).st_size == 0:
         return []
@@ -48,51 +45,6 @@ def user_obj(name):
 def home():
     return "Serveur Paris actif !"
 
-# ----- Publication d’article -----
-@app.route("/publish_article", methods=["POST"])
-def publish_article():
-    data = request.json
-    description = data.get("description")
-    prix = data.get("prix")
-    image_b64 = data.get("image")
-
-    if not description or not prix or not image_b64:
-        return {"error": "Champs requis manquants"}, 400
-
-    image_id = str(uuid.uuid4()) + ".jpg"
-    image_path = os.path.join("images", image_id)
-    with open(image_path, "wb") as f:
-        f.write(base64.b64decode(image_b64))
-
-    article = {
-        "id": str(uuid.uuid4()),
-        "description": description,
-        "prix": prix,
-        "image": f"/images/{image_id}"
-    }
-
-    articles = load(DATA["ARTICLES"])
-    articles.append(article)
-    save(DATA["ARTICLES"], articles)
-
-    socketio.emit("new_article", article)
-    return {"ok": True, "article": article}
-
-@app.route("/get_articles")
-def get_articles():
-    return jsonify(load(DATA["ARTICLES"]))
-
-@app.route("/images/<filename>")
-def serve_image(filename):
-    return send_from_directory("images", filename)
-
-# ----- Route manquante pour boutique -----
-@app.route("/shop_items")
-def shop_items():
-    items = load(DATA["SHOP_ITEMS"])
-    return jsonify(items)
-
-# ----- Reste de ton code original -----
 @app.route("/send_pub", methods=["POST"])
 def send_pub():
     msg = request.json.get("message", "")
@@ -105,11 +57,9 @@ def register():
     age = int(request.json.get("age", 0))
     if age < 18:
         return {"error": "Interdit aux moins de 18 ans"}, 403
-
     users = load(DATA["USERS"])
     if any(u["nom"] == nom for u in users):
         return {"message": "Déjà inscrit"}, 200
-
     users.append({"nom": nom, "age": age, "fc": 0, "usd": 0})
     save(DATA["USERS"], users)
     return {"message": f"Bienvenue {nom}"}, 201
@@ -119,12 +69,10 @@ def deposit():
     nom = request.json.get("nom")
     fc = int(request.json.get("fc", 0))
     usd = int(request.json.get("usd", 0))
-
     users = load(DATA["USERS"])
     user = next((u for u in users if u["nom"] == nom), None)
     if not user:
         return {"error": "Utilisateur inconnu"}, 404
-
     user["fc"] += fc
     user["usd"] += usd
     save(DATA["USERS"], users)
@@ -160,22 +108,17 @@ def parier():
     choix = d["choix"]
     devise = d["devise"]
     montant = int(d["montant"])
-
     users = load(DATA["USERS"])
     user = next((u for u in users if u["nom"] == user_name), None)
     if not user:
         return {"error": "Utilisateur inconnu"}, 404
-
     if user[devise] < montant:
         return {"error": "Solde insuffisant"}, 400
-
     paris = load(DATA["PARIS"])
     if any(p for p in paris if p["user"] == user_name and p["match_id"] == match_id):
         return {"error": "Déjà parié"}, 400
-
     user[devise] -= montant
     save(DATA["USERS"], users)
-
     paris.append({
         "user": user_name,
         "match_id": match_id,
@@ -192,10 +135,8 @@ def add_result():
     resultats = load(DATA["RESULTS"])
     resultats.append(r)
     save(DATA["RESULTS"], resultats)
-
     paris = load(DATA["PARIS"])
     users = load(DATA["USERS"])
-
     for p in paris:
         if p["match_id"] == r["match_id"]:
             if p["choix"] == r["gagnant"]:
@@ -203,7 +144,6 @@ def add_result():
                 if user:
                     gain = p["mise"] * 2
                     user[p["devise"]] += gain
-
     save(DATA["USERS"], users)
     socketio.emit("pub", f"Résultat publié pour {r['match_id']}")
     return {"ok": True}
@@ -214,7 +154,6 @@ def get_res(user):
     resultats = load(DATA["RESULTS"])
     matchs = load(DATA["MATCHS"])
     retour = []
-
     for p in paris:
         if p["user"] == user:
             match = next((m for m in matchs if m["id"] == p["match_id"]), None)
@@ -230,6 +169,35 @@ def get_res(user):
                     "devise": p["devise"]
                 })
     return jsonify(retour)
+
+# --- Boutique
+@app.route("/add_article", methods=["POST"])
+def add_article():
+    article = request.json
+    shop = load(DATA["SHOP"])
+    article["id"] = f"art_{len(shop)+1}"
+
+    # ➤ Traitement image
+    if "image" in article:
+        try:
+            img_data = base64.b64decode(article["image"])
+            filename = f"image_{int(time.time())}.png"
+            filepath = os.path.join(UPLOAD_FOLDER, filename)
+            with open(filepath, "wb") as f:
+                f.write(img_data)
+            # Chemin image accessible publiquement
+            article["image"] = f"{request.url_root}static/images/{filename}"
+        except Exception as e:
+            return {"error": "Image invalide", "details": str(e)}, 400
+
+    shop.append(article)
+    save(DATA["SHOP"], shop)
+    socketio.emit("shop_update", article)
+    return jsonify(article), 201
+
+@app.route("/get_articles")
+def get_articles():
+    return jsonify(load(DATA["SHOP"]))
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
