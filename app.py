@@ -193,34 +193,35 @@ def add_article():
 def get_articles():
     return jsonify(load(DATA["SHOP"]))
 
-# ➕ ACHAT ARTICLE
-@app.route("/acheter_article", methods=["POST"])
-def acheter_article():
-    data = request.json
-    nom = data.get("nom")
+@app.route("/acheter", methods=["POST"])
+def acheter():
+    data = request.get_json()
+    user = data.get("user")
     article_id = data.get("article_id")
     devise = data.get("devise")
 
-    if not (nom and article_id and devise):
-        return {"error": "Champs manquants"}, 400
+    if not user or not article_id or devise not in ["usd", "fc"]:
+        return jsonify({"error": "Requête invalide"}), 400
 
     users = load(DATA["USERS"])
-    user = next((u for u in users if u["nom"] == nom), None)
-    if not user:
-        return {"error": "Utilisateur inconnu"}, 404
+    user_data = next((u for u in users if u["nom"] == user), None)
+    if not user_data:
+        return jsonify({"error": "Utilisateur introuvable"}), 404
 
     shop = load(DATA["SHOP"])
     article = next((a for a in shop if a["id"] == article_id), None)
     if not article:
-        return {"error": "Article introuvable"}, 404
+        return jsonify({"error": "Article introuvable"}), 404
 
     prix = int(article.get("prix", 0))
-    if user[devise] < prix:
-        return {"error": "Solde insuffisant"}, 400
+    solde = user_data.get(devise, 0)
 
-    user[devise] -= prix
+    if solde < prix:
+        return jsonify({"error": f"Solde insuffisant en {devise.upper()}"}), 400
+
+    user_data[devise] -= prix
     save(DATA["USERS"], users)
-    return {"message": "Achat effectué avec succès"}, 200
+    return jsonify({"message": "Article acheté avec succès"}), 200
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
