@@ -9,11 +9,9 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = "secret!"
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Dossier pour stocker les images publiées
 UPLOAD_FOLDER = "static/images"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Données locales
 DATA = {
     "MATCHS": "matchs.json",
     "PARIS": "paris.json",
@@ -176,8 +174,6 @@ def add_article():
     article = request.json
     shop = load(DATA["SHOP"])
     article["id"] = f"art_{len(shop)+1}"
-
-    # ➤ Traitement image
     if "image" in article:
         try:
             img_data = base64.b64decode(article["image"])
@@ -185,11 +181,9 @@ def add_article():
             filepath = os.path.join(UPLOAD_FOLDER, filename)
             with open(filepath, "wb") as f:
                 f.write(img_data)
-            # Chemin image accessible publiquement
             article["image"] = f"{request.url_root}static/images/{filename}"
         except Exception as e:
             return {"error": "Image invalide", "details": str(e)}, 400
-
     shop.append(article)
     save(DATA["SHOP"], shop)
     socketio.emit("shop_update", article)
@@ -198,6 +192,35 @@ def add_article():
 @app.route("/get_articles")
 def get_articles():
     return jsonify(load(DATA["SHOP"]))
+
+# ➕ ACHAT ARTICLE
+@app.route("/acheter_article", methods=["POST"])
+def acheter_article():
+    data = request.json
+    nom = data.get("nom")
+    article_id = data.get("article_id")
+    devise = data.get("devise")
+
+    if not (nom and article_id and devise):
+        return {"error": "Champs manquants"}, 400
+
+    users = load(DATA["USERS"])
+    user = next((u for u in users if u["nom"] == nom), None)
+    if not user:
+        return {"error": "Utilisateur inconnu"}, 404
+
+    shop = load(DATA["SHOP"])
+    article = next((a for a in shop if a["id"] == article_id), None)
+    if not article:
+        return {"error": "Article introuvable"}, 404
+
+    prix = int(article.get("prix", 0))
+    if user[devise] < prix:
+        return {"error": "Solde insuffisant"}, 400
+
+    user[devise] -= prix
+    save(DATA["USERS"], users)
+    return {"message": "Achat effectué avec succès"}, 200
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
