@@ -177,7 +177,6 @@ def add_article():
     shop = load(DATA["SHOP"])
     article["id"] = f"art_{len(shop)+1}"
 
-    # Ajout du champ quantite si fourni
     if "quantite" not in article:
         article["quantite"] = 1
 
@@ -236,34 +235,47 @@ def acheter():
     user_data[devise] -= prix
     save(DATA["USERS"], users)
 
-    # Enregistrement du reçu
     recus = load(DATA["RECUS"])
     recu = {
+        "id": f"recu_{len(recus)+1}",
         "user": user,
-        "article": article,
+        "article": article["description"],
         "devise": devise,
-        "prix": prix,
-        "timestamp": int(time.time())
+        "montant": prix,
+        "timestamp": int(time.time()),
+        "livre": False
     }
     recus.append(recu)
     save(DATA["RECUS"], recus)
 
-    # Décrémenter la quantité et supprimer si == 0
     if "quantite" in article:
         article["quantite"] -= 1
         if article["quantite"] <= 0:
             shop = [a for a in shop if a["id"] != article_id]
+        else:
+            for i in range(len(shop)):
+                if shop[i]["id"] == article_id:
+                    shop[i] = article
         save(DATA["SHOP"], shop)
 
     return jsonify({"message": "Article acheté avec succès", "recu": recu}), 200
 
 @app.route("/get_recus")
 def get_recus():
-    user = request.args.get("user")
-    if not user:
-        return jsonify({"error": "Nom d'utilisateur requis"}), 400
+    return jsonify(load(DATA["RECUS"]))
+
+@app.route("/confirmer_livraison", methods=["POST"])
+def confirmer_livraison():
+    id_recu = request.json.get("id")
+    if not id_recu:
+        return {"error": "ID requis"}, 400
     recus = load(DATA["RECUS"])
-    return jsonify([r for r in recus if r["user"] == user])
+    for r in recus:
+        if r.get("id") == id_recu:
+            r["livre"] = True
+            save(DATA["RECUS"], recus)
+            return {"message": "Livraison confirmée"}, 200
+    return {"error": "Reçu introuvable"}, 404
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
