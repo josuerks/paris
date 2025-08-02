@@ -176,6 +176,11 @@ def add_article():
     article = request.json
     shop = load(DATA["SHOP"])
     article["id"] = f"art_{len(shop)+1}"
+
+    # Ajout du champ quantite si fourni
+    if "quantite" not in article:
+        article["quantite"] = 1
+
     if "image" in article:
         try:
             img_data = base64.b64decode(article["image"])
@@ -231,7 +236,7 @@ def acheter():
     user_data[devise] -= prix
     save(DATA["USERS"], users)
 
-    # --- Nouveau reçu ---
+    # Enregistrement du reçu
     recus = load(DATA["RECUS"])
     recu = {
         "user": user,
@@ -242,6 +247,13 @@ def acheter():
     }
     recus.append(recu)
     save(DATA["RECUS"], recus)
+
+    # Décrémenter la quantité et supprimer si == 0
+    if "quantite" in article:
+        article["quantite"] -= 1
+        if article["quantite"] <= 0:
+            shop = [a for a in shop if a["id"] != article_id]
+        save(DATA["SHOP"], shop)
 
     return jsonify({"message": "Article acheté avec succès", "recu": recu}), 200
 
