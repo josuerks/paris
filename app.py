@@ -168,7 +168,6 @@ def get_res(user):
                 })
     return jsonify(retour)
 
-# --- Boutique
 @app.route("/add_article", methods=["POST"])
 def add_article():
     article = request.json
@@ -184,10 +183,18 @@ def add_article():
             article["image"] = f"{request.url_root}static/images/{filename}"
         except Exception as e:
             return {"error": "Image invalide", "details": str(e)}, 400
-    # compatibilité prix
-    if "prix" in article and not ("prix_fc" in article or "prix_usd" in article):
-        article["prix_fc"] = int(article["prix"])
-        article["prix_usd"] = int(article["prix"])
+
+    # Gestion correcte des prix USD et FC
+    if "prix_usd" not in article and "prix_fc" not in article:
+        article["prix_usd"] = article["prix_fc"] = int(article.get("prix", 0))
+    elif "prix_usd" not in article:
+        article["prix_usd"] = int(article["prix_fc"])
+    elif "prix_fc" not in article:
+        article["prix_fc"] = int(article["prix_usd"])
+    else:
+        article["prix_usd"] = int(article["prix_usd"])
+        article["prix_fc"] = int(article["prix_fc"])
+
     shop.append(article)
     save(DATA["SHOP"], shop)
     socketio.emit("shop_update", article)
