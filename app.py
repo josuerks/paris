@@ -1,7 +1,7 @@
 import eventlet
 eventlet.monkey_patch()
 
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify
 from flask_socketio import SocketIO
 import json, os, base64, time
 
@@ -173,7 +173,9 @@ def add_article():
     article = request.json
     shop = load(DATA["SHOP"])
     article["id"] = f"art_{len(shop)+1}"
-    if "image" in article:
+
+    # Traitement image base64
+    if "image" in article and article["image"]:
         try:
             img_data = base64.b64decode(article["image"])
             filename = f"image_{int(time.time())}.png"
@@ -184,16 +186,19 @@ def add_article():
         except Exception as e:
             return {"error": "Image invalide", "details": str(e)}, 400
 
-    # Gestion correcte des prix USD et FC
-    if "prix_usd" not in article and "prix_fc" not in article:
-        article["prix_usd"] = article["prix_fc"] = int(article.get("prix", 0))
-    elif "prix_usd" not in article:
-        article["prix_usd"] = int(article["prix_fc"])
-    elif "prix_fc" not in article:
-        article["prix_fc"] = int(article["prix_usd"])
+    # Correction affichage prix USD et FC
+    prix_usd = article.get("prix_usd")
+    prix_fc = article.get("prix_fc")
+
+    if prix_usd is not None:
+        article["prix_usd"] = int(prix_usd)
     else:
-        article["prix_usd"] = int(article["prix_usd"])
-        article["prix_fc"] = int(article["prix_fc"])
+        article["prix_usd"] = 0
+
+    if prix_fc is not None:
+        article["prix_fc"] = int(prix_fc)
+    else:
+        article["prix_fc"] = 0
 
     shop.append(article)
     save(DATA["SHOP"], shop)
@@ -224,11 +229,7 @@ def acheter():
     if not article:
         return jsonify({"error": "Article introuvable"}), 404
 
-    prix = article.get(f"prix_{devise}", None)
-    if prix is None:
-        return jsonify({"error": f"Prix non défini pour {devise.upper()}"}), 400
-
-    prix = int(prix)
+    prix = article.get(f"prix_{devise}", 0)
     solde = user_data.get(devise, 0)
 
     if solde < prix:
