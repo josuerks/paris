@@ -184,6 +184,10 @@ def add_article():
             article["image"] = f"{request.url_root}static/images/{filename}"
         except Exception as e:
             return {"error": "Image invalide", "details": str(e)}, 400
+    # compatibilité prix
+    if "prix" in article and not ("prix_fc" in article or "prix_usd" in article):
+        article["prix_fc"] = int(article["prix"])
+        article["prix_usd"] = int(article["prix"])
     shop.append(article)
     save(DATA["SHOP"], shop)
     socketio.emit("shop_update", article)
@@ -213,7 +217,11 @@ def acheter():
     if not article:
         return jsonify({"error": "Article introuvable"}), 404
 
-    prix = int(article.get("prix", 0))
+    prix = article.get(f"prix_{devise}", None)
+    if prix is None:
+        return jsonify({"error": f"Prix non défini pour {devise.upper()}"}), 400
+
+    prix = int(prix)
     solde = user_data.get(devise, 0)
 
     if solde < prix:
