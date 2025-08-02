@@ -1,7 +1,7 @@
 import eventlet
 eventlet.monkey_patch()
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_socketio import SocketIO
 import json, os, base64, time
 
@@ -10,6 +10,7 @@ app.config["SECRET_KEY"] = "secret!"
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 UPLOAD_FOLDER = "static/images"
+RECU_FOLDER = "recus.json"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 DATA = {
@@ -17,7 +18,8 @@ DATA = {
     "PARIS": "paris.json",
     "RESULTS": "resultats.json",
     "USERS": "users.json",
-    "SHOP": "shop.json"
+    "SHOP": "shop.json",
+    "RECUS": RECU_FOLDER
 }
 
 for f in DATA.values():
@@ -168,14 +170,13 @@ def get_res(user):
                 })
     return jsonify(retour)
 
+# --- Boutique
 @app.route("/add_article", methods=["POST"])
 def add_article():
     article = request.json
     shop = load(DATA["SHOP"])
     article["id"] = f"art_{len(shop)+1}"
-
-    # Traitement image base64
-    if "image" in article and article["image"]:
+    if "image" in article:
         try:
             img_data = base64.b64decode(article["image"])
             filename = f"image_{int(time.time())}.png"
@@ -185,21 +186,9 @@ def add_article():
             article["image"] = f"{request.url_root}static/images/{filename}"
         except Exception as e:
             return {"error": "Image invalide", "details": str(e)}, 400
-
-    # Correction affichage prix USD et FC
-    prix_usd = article.get("prix_usd")
-    prix_fc = article.get("prix_fc")
-
-    if prix_usd is not None:
-        article["prix_usd"] = int(prix_usd)
-    else:
-        article["prix_usd"] = 0
-
-    if prix_fc is not None:
-        article["prix_fc"] = int(prix_fc)
-    else:
-        article["prix_fc"] = 0
-
+    if "prix" in article and not ("prix_fc" in article or "prix_usd" in article):
+        article["prix_fc"] = int(article["prix"])
+        article["prix_usd"] = int(article["prix"])
     shop.append(article)
     save(DATA["SHOP"], shop)
     socketio.emit("shop_update", article)
@@ -229,7 +218,11 @@ def acheter():
     if not article:
         return jsonify({"error": "Article introuvable"}), 404
 
-    prix = article.get(f"prix_{devise}", 0)
+    prix = article.get(f"prix_{devise}", None)
+    if prix is None:
+        return jsonify({"error": f"Prix non défini pour {devise.upper()}"}), 400
+
+    prix = int(prix)
     solde = user_data.get(devise, 0)
 
     if solde < prix:
@@ -237,9 +230,29 @@ def acheter():
 
     user_data[devise] -= prix
     save(DATA["USERS"], users)
-    return jsonify({"message": "Article acheté avec succès"}), 200
+
+    # --- Nouveau reçu ---
+    recus = load(DATA["RECUS"])
+    recu = {
+        "user": user,
+        "article": article,
+        "devise": devise,
+        "prix": prix,
+        "timestamp": int(time.time())
+    }
+    recus.append(recu)
+    save(DATA["RECUS"], recus)
+
+    return jsonify({"message": "Article acheté avec succès", "recu": recu}), 200
+
+@app.route("/get_recus")
+def get_recus():
+    user = request.args.get("user")
+    if not user:
+        return jsonify({"error": "Nom d'utilisateur requis"}), 400
+    recus = load(DATA["RECUS"])
+    return jsonify([r for r in recus if r["user"] == user])
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port)
-
