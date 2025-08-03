@@ -151,12 +151,11 @@ def acheter():
     recu = {
         "id": f"recu_{len(recus)+1}",
         "user": user,
-        "article": article["description"],
+        "article": article,  # ✅ ici on met tout l'article, pas juste description
         "devise": devise,
         "montant": prix,
         "timestamp": int(time.time()),
-        "livre": False,
-        "image": article.get("image", "")  # ✅ Ajout de l'image ici
+        "livre": False
     }
     recus.append(recu)
     save(DATA["RECUS"], recus)
@@ -195,3 +194,4 @@ def confirmer_livraison():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port)
+
