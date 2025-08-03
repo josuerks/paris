@@ -41,14 +41,12 @@ def user_obj(name):
 def home():
     return "Serveur Vente en ligne actif !"
 
-# ✅ ENVOI PUB EN TEMPS RÉEL
 @app.route("/send_pub", methods=["POST"])
 def send_pub():
     msg = request.json.get("message", "")
     socketio.emit("pub", msg)
     return {"ok": True}
 
-# ✅ ENREGISTREMENT UTILISATEUR
 @app.route("/register", methods=["POST"])
 def register():
     nom = request.json.get("nom", "").strip()
@@ -62,7 +60,6 @@ def register():
     save(DATA["USERS"], users)
     return {"message": f"Bienvenue {nom}"}, 201
 
-# ✅ DÉPÔT D'ARGENT
 @app.route("/deposit", methods=["POST"])
 def deposit():
     nom = request.json.get("nom")
@@ -77,7 +74,6 @@ def deposit():
     save(DATA["USERS"], users)
     return {"message": "Dépôt enregistré", "solde": user}, 200
 
-# ✅ CONSULTER SOLDE
 @app.route("/balance/<nom>")
 def balance(nom):
     user = user_obj(nom)
@@ -85,7 +81,6 @@ def balance(nom):
         return {"error": "Utilisateur inconnu"}, 404
     return {"fc": user["fc"], "usd": user["usd"]}
 
-# ✅ AJOUT ARTICLE
 @app.route("/add_article", methods=["POST"])
 def add_article():
     article = request.json
@@ -115,12 +110,10 @@ def add_article():
     socketio.emit("shop_update", article)
     return jsonify(article), 201
 
-# ✅ OBTENIR ARTICLES
 @app.route("/get_articles")
 def get_articles():
     return jsonify(load(DATA["SHOP"]))
 
-# ✅ ACHAT ARTICLE
 @app.route("/acheter", methods=["POST"])
 def acheter():
     data = request.get_json()
@@ -162,7 +155,8 @@ def acheter():
         "devise": devise,
         "montant": prix,
         "timestamp": int(time.time()),
-        "livre": False
+        "livre": False,
+        "image": article.get("image", "")  # ✅ Ajout de l'image ici
     }
     recus.append(recu)
     save(DATA["RECUS"], recus)
@@ -179,12 +173,12 @@ def acheter():
 
     return jsonify({"message": "Article acheté avec succès", "recu": recu}), 200
 
-# ✅ RECUS
-@app.route("/get_recus")
-def get_recus():
-    return jsonify(load(DATA["RECUS"]))
+@app.route("/get_recus/<nom>")
+def get_recus(nom):
+    all_recus = load(DATA["RECUS"])
+    user_recus = [r for r in all_recus if r["user"] == nom]
+    return jsonify(user_recus)
 
-# ✅ CONFIRMER LIVRAISON
 @app.route("/confirmer_livraison", methods=["POST"])
 def confirmer_livraison():
     id_recu = request.json.get("id")
