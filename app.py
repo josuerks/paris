@@ -18,11 +18,13 @@ DATA = {
     "RECUS": "recus.json"
 }
 
+# Assurer que les fichiers existent
 for f in DATA.values():
     if not os.path.exists(f):
         with open(f, "w") as fp:
             fp.write("[]")
 
+# Fonctions utilitaires
 def load(path):
     if not os.path.exists(path) or os.stat(path).st_size == 0:
         return []
@@ -37,6 +39,7 @@ def user_obj(name):
     users = load(DATA["USERS"])
     return next((u for u in users if u["nom"] == name), None)
 
+# Routes API
 @app.route("/")
 def home():
     return "Serveur Vente en ligne actif !"
@@ -134,7 +137,7 @@ def acheter():
     if not article:
         return jsonify({"error": "Article introuvable"}), 404
 
-    prix = article.get(f"prix_{devise}", None)
+    prix = article.get(f"prix_{devise}")
     if prix is None:
         return jsonify({"error": f"Prix non défini pour {devise.upper()}"}), 400
 
@@ -147,11 +150,13 @@ def acheter():
     user_data[devise] -= prix
     save(DATA["USERS"], users)
 
+    # Créer un reçu propre
     recus = load(DATA["RECUS"])
     recu = {
         "id": f"recu_{len(recus)+1}",
         "user": user,
-        "article": article,
+        "acheteur": user,
+        "article": article.get("description", "Article"),
         "devise": devise,
         "montant": prix,
         "timestamp": int(time.time()),
@@ -172,14 +177,12 @@ def acheter():
 
     return jsonify({"message": "Article acheté avec succès", "recu": recu}), 200
 
-# ✅ Route existante pour un seul utilisateur
 @app.route("/get_recus/<nom>")
 def get_recus(nom):
     all_recus = load(DATA["RECUS"])
     user_recus = [r for r in all_recus if r["user"] == nom]
     return jsonify(user_recus)
 
-# ✅ ✅ ✅ Nouvelle route pour obtenir tous les reçus
 @app.route("/get_recus")
 def get_all_recus():
     return jsonify(load(DATA["RECUS"]))
@@ -200,5 +203,4 @@ def confirmer_livraison():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port)
-
 
