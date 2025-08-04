@@ -18,13 +18,12 @@ DATA = {
     "RECUS": "recus.json"
 }
 
-# Assurer que les fichiers existent
+# Initialisation des fichiers vides
 for f in DATA.values():
     if not os.path.exists(f):
         with open(f, "w") as fp:
             fp.write("[]")
 
-# Fonctions utilitaires
 def load(path):
     if not os.path.exists(path) or os.stat(path).st_size == 0:
         return []
@@ -39,7 +38,6 @@ def user_obj(name):
     users = load(DATA["USERS"])
     return next((u for u in users if u["nom"] == name), None)
 
-# Routes API
 @app.route("/")
 def home():
     return "Serveur Vente en ligne actif !"
@@ -143,20 +141,20 @@ def acheter():
 
     prix = int(prix)
     solde = user_data.get(devise, 0)
-
     if solde < prix:
         return jsonify({"error": f"Solde insuffisant en {devise.upper()}"}), 400
 
     user_data[devise] -= prix
     save(DATA["USERS"], users)
 
-    # Créer un reçu propre
+    # ✅ Reçu avec image et titre
     recus = load(DATA["RECUS"])
     recu = {
         "id": f"recu_{len(recus)+1}",
         "user": user,
         "acheteur": user,
-        "article": article.get("description", "Article"),
+        "nom_article": article.get("nom", "Article"),
+        "image": article.get("image", ""),
         "devise": devise,
         "montant": prix,
         "timestamp": int(time.time()),
