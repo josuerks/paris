@@ -2,10 +2,14 @@ import eventlet
 eventlet.monkey_patch()
 
 from flask import Flask, request, jsonify
+from flask_cors import CORS
+
 from flask_socketio import SocketIO
 import json, os, base64, time
 
 app = Flask(__name__)
+CORS(app)
+
 app.config["SECRET_KEY"] = "secret!"
 socketio = SocketIO(app, cors_allowed_origins="*")
 
