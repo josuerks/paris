@@ -120,6 +120,7 @@ def acheter():
     user = data.get("user")
     article_id = data.get("article_id")
     devise = data.get("devise")
+    adresse_client = data.get("adresse", {})
 
     if not user or not article_id or devise not in ["usd", "fc"]:
         return jsonify({"error": "Requête invalide"}), 400
@@ -128,6 +129,17 @@ def acheter():
     user_data = next((u for u in users if u["nom"] == user), None)
     if not user_data:
         return jsonify({"error": "Utilisateur introuvable"}), 404
+
+    # ✅ Met à jour l'adresse avec commune, quartier, avenue, latitude, longitude
+    if adresse_client:
+        user_data["adresse"] = {
+            "commune": adresse_client.get("commune", "N/A"),
+            "quartier": adresse_client.get("quartier", "N/A"),
+            "avenue": adresse_client.get("avenue", "N/A"),
+            "latitude": adresse_client.get("latitude", "N/A"),
+            "longitude": adresse_client.get("longitude", "N/A")
+        }
+        save(DATA["USERS"], users)
 
     shop = load(DATA["SHOP"])
     article = next((a for a in shop if a["id"] == article_id), None)
@@ -161,7 +173,9 @@ def acheter():
         "adresse": {
             "commune": adresse.get("commune", "N/A"),
             "quartier": adresse.get("quartier", "N/A"),
-            "avenue": adresse.get("avenue", "N/A")
+            "avenue": adresse.get("avenue", "N/A"),
+            "latitude": adresse.get("latitude", "N/A"),
+            "longitude": adresse.get("longitude", "N/A")
         }
     }
     recus.append(recu)
@@ -202,7 +216,9 @@ def get_all_recus():
             "adresse": {
                 "commune": adresse.get("commune", "N/A"),
                 "quartier": adresse.get("quartier", "N/A"),
-                "avenue": adresse.get("avenue", "N/A")
+                "avenue": adresse.get("avenue", "N/A"),
+                "latitude": adresse.get("latitude", "N/A"),
+                "longitude": adresse.get("longitude", "N/A")
             }
         })
 
@@ -240,33 +256,6 @@ def envoyer_position():
     socketio.emit("position_client", payload)
 
     return {"message": "Coordonnées envoyées au vendeur"}, 200
-
-# Nouvelle route pour mettre à jour l'adresse
-@app.route("/update_adresse", methods=["POST"])
-def update_adresse():
-    data = request.json
-    nom = data.get("nom")
-    commune = data.get("commune")
-    quartier = data.get("quartier")
-    avenue = data.get("avenue")
-
-    if not nom:
-        return {"error": "Nom requis"}, 400
-
-    users = load(DATA["USERS"])
-    user = next((u for u in users if u["nom"] == nom), None)
-    if not user:
-        return {"error": "Utilisateur introuvable"}, 404
-
-    user["adresse"] = {
-        "commune": commune or "N/A",
-        "quartier": quartier or "N/A",
-        "avenue": avenue or "N/A"
-    }
-
-    save(DATA["USERS"], users)
-    return {"message": "Adresse mise à jour"}, 200
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
