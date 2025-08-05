@@ -147,7 +147,6 @@ def acheter():
     user_data[devise] -= prix
     save(DATA["USERS"], users)
 
-    # On récupère l'adresse du user (vide si non définie)
     adresse = user_data.get("adresse", {})
 
     recus = load(DATA["RECUS"])
@@ -222,7 +221,6 @@ def confirmer_livraison():
             return {"message": "Livraison confirmée"}, 200
     return {"error": "Reçu introuvable"}, 404
 
-# ✅✅✅ NOUVELLE ROUTE POUR LA POSITION DU CLIENT
 @app.route("/envoyer_position", methods=["POST"])
 def envoyer_position():
     data = request.get_json()
@@ -239,10 +237,36 @@ def envoyer_position():
         "longitude": longitude
     }
 
-    # Envoi au vendeur/livreur via WebSocket
     socketio.emit("position_client", payload)
 
     return {"message": "Coordonnées envoyées au vendeur"}, 200
+
+# Nouvelle route pour mettre à jour l'adresse
+@app.route("/update_adresse", methods=["POST"])
+def update_adresse():
+    data = request.json
+    nom = data.get("nom")
+    commune = data.get("commune")
+    quartier = data.get("quartier")
+    avenue = data.get("avenue")
+
+    if not nom:
+        return {"error": "Nom requis"}, 400
+
+    users = load(DATA["USERS"])
+    user = next((u for u in users if u["nom"] == nom), None)
+    if not user:
+        return {"error": "Utilisateur introuvable"}, 404
+
+    user["adresse"] = {
+        "commune": commune or "N/A",
+        "quartier": quartier or "N/A",
+        "avenue": avenue or "N/A"
+    }
+
+    save(DATA["USERS"], users)
+    return {"message": "Adresse mise à jour"}, 200
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
