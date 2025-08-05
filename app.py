@@ -115,11 +115,13 @@ def get_articles():
     return jsonify(load(DATA["SHOP"]))
 
 @app.route("/acheter", methods=["POST"])
+@app.route("/acheter", methods=["POST"])
 def acheter():
     data = request.get_json()
     user = data.get("user")
     article_id = data.get("article_id")
     devise = data.get("devise")
+    adresse_client = data.get("adresse", {})  # Adresse envoyée par le client
 
     if not user or not article_id or devise not in ["usd", "fc"]:
         return jsonify({"error": "Requête invalide"}), 400
@@ -145,9 +147,18 @@ def acheter():
         return jsonify({"error": f"Solde insuffisant en {devise.upper()}"}), 400
 
     user_data[devise] -= prix
-    save(DATA["USERS"], users)
 
-    adresse = user_data.get("adresse", {})
+    # Optionnel : mettre à jour l'adresse de l'utilisateur avec celle reçue
+    if adresse_client:
+        user_data["adresse"] = {
+            "commune": adresse_client.get("commune", "N/A"),
+            "quartier": adresse_client.get("quartier", "N/A"),
+            "avenue": adresse_client.get("avenue", "N/A"),
+            "latitude": adresse_client.get("latitude", "N/A"),
+            "longitude": adresse_client.get("longitude", "N/A")
+        }
+
+    save(DATA["USERS"], users)
 
     recus = load(DATA["RECUS"])
     recu = {
@@ -159,9 +170,11 @@ def acheter():
         "timestamp": int(time.time()),
         "livre": False,
         "adresse": {
-            "commune": adresse.get("commune", "N/A"),
-            "quartier": adresse.get("quartier", "N/A"),
-            "avenue": adresse.get("avenue", "N/A")
+            "commune": adresse_client.get("commune") or user_data["adresse"].get("commune", "N/A"),
+            "quartier": adresse_client.get("quartier") or user_data["adresse"].get("quartier", "N/A"),
+            "avenue": adresse_client.get("avenue") or user_data["adresse"].get("avenue", "N/A"),
+            "latitude": adresse_client.get("latitude") or user_data["adresse"].get("latitude", "N/A"),
+            "longitude": adresse_client.get("longitude") or user_data["adresse"].get("longitude", "N/A")
         }
     }
     recus.append(recu)
@@ -178,6 +191,7 @@ def acheter():
         save(DATA["SHOP"], shop)
 
     return jsonify({"message": "Article acheté avec succès", "recu": recu}), 200
+
 
 @app.route("/get_recus/<nom>")
 def get_recus(nom):
