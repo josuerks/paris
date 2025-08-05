@@ -116,12 +116,16 @@ def get_articles():
 
 @app.route("/acheter", methods=["POST"])
 @app.route("/acheter", methods=["POST"])
+
+# ... (tout ton code avant est inchangé)
+
+@app.route("/acheter", methods=["POST"])
 def acheter():
     data = request.get_json()
     user = data.get("user")
     article_id = data.get("article_id")
     devise = data.get("devise")
-    adresse_client = data.get("adresse", {})  # Adresse envoyée par le client
+    adresse_client = data.get("adresse", {})  # contient commune, quartier, avenue, latitude, longitude
 
     if not user or not article_id or devise not in ["usd", "fc"]:
         return jsonify({"error": "Requête invalide"}), 400
@@ -142,13 +146,12 @@ def acheter():
 
     prix = int(prix)
     solde = user_data.get(devise, 0)
-
     if solde < prix:
         return jsonify({"error": f"Solde insuffisant en {devise.upper()}"}), 400
 
     user_data[devise] -= prix
 
-    # Optionnel : mettre à jour l'adresse de l'utilisateur avec celle reçue
+    # 🆕 Mettre à jour l'adresse complète avec latitude/longitude
     if adresse_client:
         user_data["adresse"] = {
             "commune": adresse_client.get("commune", "N/A"),
@@ -192,6 +195,29 @@ def acheter():
 
     return jsonify({"message": "Article acheté avec succès", "recu": recu}), 200
 
+
+@app.route("/get_recus")
+def get_all_recus():
+    recus = load(DATA["RECUS"])
+    cleaned = []
+    for r in recus:
+        adresse = r.get("adresse", {})
+        cleaned.append({
+            "id": r["id"],
+            "acheteur": r["user"],
+            "article": r["article"].get("description", "Non spécifié") if isinstance(r["article"], dict) else str(r["article"]),
+            "montant": r["montant"],
+            "devise": r["devise"],
+            "livre": r.get("livre", False),
+            "adresse": {
+                "commune": adresse.get("commune", "N/A"),
+                "quartier": adresse.get("quartier", "N/A"),
+                "avenue": adresse.get("avenue", "N/A"),
+                "latitude": adresse.get("latitude", "N/A"),
+                "longitude": adresse.get("longitude", "N/A")
+            }
+        })
+    return jsonify(cleaned)
 
 @app.route("/get_recus/<nom>")
 def get_recus(nom):
