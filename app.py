@@ -178,7 +178,6 @@ def get_recus(nom):
     user_recus = [r for r in all_recus if r["user"] == nom]
     return jsonify(user_recus)
 
-# ✅✅ Partie corrigée ici
 @app.route("/get_recus")
 def get_all_recus():
     recus = load(DATA["RECUS"])
@@ -209,7 +208,28 @@ def confirmer_livraison():
             return {"message": "Livraison confirmée"}, 200
     return {"error": "Reçu introuvable"}, 404
 
+# ✅✅✅ NOUVELLE ROUTE POUR LA POSITION DU CLIENT
+@app.route("/envoyer_position", methods=["POST"])
+def envoyer_position():
+    data = request.get_json()
+    client = data.get("client")
+    latitude = data.get("latitude")
+    longitude = data.get("longitude")
+
+    if not all([client, latitude, longitude]):
+        return {"error": "Données incomplètes"}, 400
+
+    payload = {
+        "client": client,
+        "latitude": latitude,
+        "longitude": longitude
+    }
+
+    # Envoi au vendeur/livreur via WebSocket
+    socketio.emit("position_client", payload)
+
+    return {"message": "Coordonnées envoyées au vendeur"}, 200
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port)
-
