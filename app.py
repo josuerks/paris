@@ -172,17 +172,29 @@ def acheter():
 
     return jsonify({"message": "Article acheté avec succès", "recu": recu}), 200
 
-# ✅ Route existante pour un seul utilisateur
 @app.route("/get_recus/<nom>")
 def get_recus(nom):
     all_recus = load(DATA["RECUS"])
     user_recus = [r for r in all_recus if r["user"] == nom]
     return jsonify(user_recus)
 
-# ✅ ✅ ✅ Nouvelle route pour obtenir tous les reçus
+# ✅✅ Partie corrigée ici
 @app.route("/get_recus")
 def get_all_recus():
-    return jsonify(load(DATA["RECUS"]))
+    recus = load(DATA["RECUS"])
+    cleaned = []
+
+    for r in recus:
+        cleaned.append({
+            "id": r["id"],
+            "acheteur": r["user"],
+            "article": r["article"].get("description", "Non spécifié") if isinstance(r["article"], dict) else str(r["article"]),
+            "montant": r["montant"],
+            "devise": r["devise"],
+            "livre": r.get("livre", False)
+        })
+
+    return jsonify(cleaned)
 
 @app.route("/confirmer_livraison", methods=["POST"])
 def confirmer_livraison():
@@ -200,5 +212,4 @@ def confirmer_livraison():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port)
-
 
