@@ -115,17 +115,12 @@ def get_articles():
     return jsonify(load(DATA["SHOP"]))
 
 @app.route("/acheter", methods=["POST"])
-@app.route("/acheter", methods=["POST"])
-
-# ... (tout ton code avant est inchangé)
-
-@app.route("/acheter", methods=["POST"])
 def acheter():
     data = request.get_json()
     user = data.get("user")
     article_id = data.get("article_id")
     devise = data.get("devise")
-    adresse_client = data.get("adresse", {})  # contient commune, quartier, avenue, latitude, longitude
+    adresse_client = data.get("adresse", {})
 
     if not user or not article_id or devise not in ["usd", "fc"]:
         return jsonify({"error": "Requête invalide"}), 400
@@ -151,7 +146,6 @@ def acheter():
 
     user_data[devise] -= prix
 
-    # 🆕 Mettre à jour l'adresse complète avec latitude/longitude
     if adresse_client:
         user_data["adresse"] = {
             "commune": adresse_client.get("commune", "N/A"),
@@ -195,7 +189,6 @@ def acheter():
 
     return jsonify({"message": "Article acheté avec succès", "recu": recu}), 200
 
-
 @app.route("/get_recus")
 def get_all_recus():
     recus = load(DATA["RECUS"])
@@ -220,33 +213,10 @@ def get_all_recus():
     return jsonify(cleaned)
 
 @app.route("/get_recus/<nom>")
-def get_recus(nom):
+def get_recus_par_nom(nom):
     all_recus = load(DATA["RECUS"])
     user_recus = [r for r in all_recus if r["user"] == nom]
     return jsonify(user_recus)
-
-@app.route("/get_recus")
-def get_all_recus():
-    recus = load(DATA["RECUS"])
-    cleaned = []
-
-    for r in recus:
-        adresse = r.get("adresse", {})
-        cleaned.append({
-            "id": r["id"],
-            "acheteur": r["user"],
-            "article": r["article"].get("description", "Non spécifié") if isinstance(r["article"], dict) else str(r["article"]),
-            "montant": r["montant"],
-            "devise": r["devise"],
-            "livre": r.get("livre", False),
-            "adresse": {
-                "commune": adresse.get("commune", "N/A"),
-                "quartier": adresse.get("quartier", "N/A"),
-                "avenue": adresse.get("avenue", "N/A")
-            }
-        })
-
-    return jsonify(cleaned)
 
 @app.route("/confirmer_livraison", methods=["POST"])
 def confirmer_livraison():
@@ -281,7 +251,6 @@ def envoyer_position():
 
     return {"message": "Coordonnées envoyées au vendeur"}, 200
 
-# Nouvelle route pour mettre à jour l'adresse
 @app.route("/update_adresse", methods=["POST"])
 def update_adresse():
     data = request.json
@@ -306,7 +275,6 @@ def update_adresse():
 
     save(DATA["USERS"], users)
     return {"message": "Adresse mise à jour"}, 200
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
