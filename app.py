@@ -56,7 +56,7 @@ def register():
     users = load(DATA["USERS"])
     if any(u["nom"] == nom for u in users):
         return {"message": "Déjà inscrit"}, 200
-    users.append({"nom": nom, "age": age, "fc": 0, "usd": 0})
+    users.append({"nom": nom, "age": age, "fc": 0, "usd": 0, "adresse": {}})
     save(DATA["USERS"], users)
     return {"message": f"Bienvenue {nom}"}, 201
 
@@ -147,6 +147,9 @@ def acheter():
     user_data[devise] -= prix
     save(DATA["USERS"], users)
 
+    # On récupère l'adresse du user (vide si non définie)
+    adresse = user_data.get("adresse", {})
+
     recus = load(DATA["RECUS"])
     recu = {
         "id": f"recu_{len(recus)+1}",
@@ -155,7 +158,12 @@ def acheter():
         "devise": devise,
         "montant": prix,
         "timestamp": int(time.time()),
-        "livre": False
+        "livre": False,
+        "adresse": {
+            "commune": adresse.get("commune", "N/A"),
+            "quartier": adresse.get("quartier", "N/A"),
+            "avenue": adresse.get("avenue", "N/A")
+        }
     }
     recus.append(recu)
     save(DATA["RECUS"], recus)
@@ -184,13 +192,19 @@ def get_all_recus():
     cleaned = []
 
     for r in recus:
+        adresse = r.get("adresse", {})
         cleaned.append({
             "id": r["id"],
             "acheteur": r["user"],
             "article": r["article"].get("description", "Non spécifié") if isinstance(r["article"], dict) else str(r["article"]),
             "montant": r["montant"],
             "devise": r["devise"],
-            "livre": r.get("livre", False)
+            "livre": r.get("livre", False),
+            "adresse": {
+                "commune": adresse.get("commune", "N/A"),
+                "quartier": adresse.get("quartier", "N/A"),
+                "avenue": adresse.get("avenue", "N/A")
+            }
         })
 
     return jsonify(cleaned)
@@ -233,3 +247,4 @@ def envoyer_position():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port)
+
