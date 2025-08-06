@@ -1,9 +1,8 @@
 import eventlet
 eventlet.monkey_patch()
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-
 from flask_socketio import SocketIO
 import json, os, base64, time
 
@@ -40,6 +39,10 @@ def save(path, data):
 def user_obj(name):
     users = load(DATA["USERS"])
     return next((u for u in users if u["nom"] == name), None)
+
+@app.route("/static/images/<filename>")
+def serve_image(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
 
 @app.route("/")
 def home():
@@ -101,7 +104,9 @@ def add_article():
             filepath = os.path.join(UPLOAD_FOLDER, filename)
             with open(filepath, "wb") as f:
                 f.write(img_data)
-            article["image"] = f"{request.url_root}static/images/{filename}"
+            # URL HTTPS correcte pour accéder à l'image
+            base_url = request.url_root.rstrip('/')
+            article["image"] = f"{base_url}/static/images/{filename}"
         except Exception as e:
             return {"error": "Image invalide", "details": str(e)}, 400
 
@@ -126,6 +131,8 @@ def acheter():
     devise = data.get("devise")
     adresse_client = data.get("adresse", {})
 
+    print(f"Achat demandé: user={user}, article_id={article_id}, devise={devise}, adresse={adresse_client}")
+
     if not user or not article_id or devise not in ["usd", "fc"]:
         return jsonify({"error": "Requête invalide"}), 400
 
@@ -148,8 +155,10 @@ def acheter():
     if solde < prix:
         return jsonify({"error": f"Solde insuffisant en {devise.upper()}"}), 400
 
+    # Débit solde
     user_data[devise] -= prix
 
+    # Mise à jour adresse
     if adresse_client:
         user_data["adresse"] = {
             "commune": adresse_client.get("commune", "N/A"),
@@ -161,6 +170,7 @@ def acheter():
 
     save(DATA["USERS"], users)
 
+    # Création du reçu
     recus = load(DATA["RECUS"])
     recu = {
         "id": f"recu_{len(recus)+1}",
@@ -181,6 +191,7 @@ def acheter():
     recus.append(recu)
     save(DATA["RECUS"], recus)
 
+    # Mise à jour quantité article
     if "quantite" in article:
         article["quantite"] -= 1
         if article["quantite"] <= 0:
@@ -191,6 +202,7 @@ def acheter():
                     shop[i] = article
         save(DATA["SHOP"], shop)
 
+    print(f"Achat réussi: {recu}")
     return jsonify({"message": "Article acheté avec succès", "recu": recu}), 200
 
 @app.route("/get_recus")
@@ -282,5 +294,6 @@ def update_adresse():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
+    print(f"Démarrage serveur sur le port {port} ...")
     socketio.run(app, host="0.0.0.0", port=port)
 
