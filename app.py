@@ -1,6 +1,3 @@
-import eventlet
-eventlet.monkey_patch()
-
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -10,7 +7,7 @@ app = Flask(__name__)
 CORS(app)
 
 app.config["SECRET_KEY"] = "secret!"
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 UPLOAD_FOLDER = "static/images"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -131,8 +128,6 @@ def acheter():
     devise = data.get("devise")
     adresse_client = data.get("adresse", {})
 
-    print(f"Achat demandé: user={user}, article_id={article_id}, devise={devise}, adresse={adresse_client}")
-
     if not user or not article_id or devise not in ["usd", "fc"]:
         return jsonify({"error": "Requête invalide"}), 400
 
@@ -202,7 +197,6 @@ def acheter():
                     shop[i] = article
         save(DATA["SHOP"], shop)
 
-    print(f"Achat réussi: {recu}")
     return jsonify({"message": "Article acheté avec succès", "recu": recu}), 200
 
 @app.route("/get_recus")
