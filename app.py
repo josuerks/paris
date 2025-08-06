@@ -1,21 +1,23 @@
-from flask import Flask, request, jsonify, send_from_directory
-from flask_cors import CORS
+import eventlet
+eventlet.monkey_patch()
+
+from flask import Flask, request, jsonify
 from flask_socketio import SocketIO
 import json, os, base64, time
 
 app = Flask(__name__)
-CORS(app)
-
 app.config["SECRET_KEY"] = "secret!"
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 UPLOAD_FOLDER = "static/images"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 DATA = {
+    "MATCHS": "matchs.json",
+    "PARIS": "paris.json",
+    "RESULTS": "resultats.json",
     "USERS": "users.json",
-    "SHOP": "shop.json",
-    "RECUS": "recus.json"
+    "SHOP": "shop.json"
 }
 
 for f in DATA.values():
@@ -37,13 +39,9 @@ def user_obj(name):
     users = load(DATA["USERS"])
     return next((u for u in users if u["nom"] == name), None)
 
-@app.route("/static/images/<filename>")
-def serve_image(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
-
-@app.route("/")
+@app.route('/')
 def home():
-    return "Serveur Vente en ligne actif !"
+    return "Serveur Paris actif !"
 
 @app.route("/send_pub", methods=["POST"])
 def send_pub():
@@ -55,12 +53,12 @@ def send_pub():
 def register():
     nom = request.json.get("nom", "").strip()
     age = int(request.json.get("age", 0))
-    if age < 12:
-        return {"error": "Trop jeune"}, 403
+    if age < 18:
+        return {"error": "Interdit aux moins de 18 ans"}, 403
     users = load(DATA["USERS"])
     if any(u["nom"] == nom for u in users):
         return {"message": "Déjà inscrit"}, 200
-    users.append({"nom": nom, "age": age, "fc": 0, "usd": 0, "adresse": {}})
+    users.append({"nom": nom, "age": age, "fc": 0, "usd": 0})
     save(DATA["USERS"], users)
     return {"message": f"Bienvenue {nom}"}, 201
 
@@ -85,31 +83,122 @@ def balance(nom):
         return {"error": "Utilisateur inconnu"}, 404
     return {"fc": user["fc"], "usd": user["usd"]}
 
+@app.route("/add_match", methods=["POST"])
+def add_match():
+    d = request.json
+    matchs = load(DATA["MATCHS"])
+    m_id = f"match_{len(matchs) + 1}"
+    new_match = {"id": m_id, "equipe1": d["equipe1"], "equipe2": d["equipe2"]}
+    matchs.append(new_match)
+    save(DATA["MATCHS"], matchs)
+    socketio.emit("new_match", new_match)
+    return {"match": new_match}, 201
+
+@app.route("/get_matchs")
+def get_matchs():
+    return jsonify(load(DATA["MATCHS"]))
+
+@app.route("/parier", methods=["POST"])
+def parier():
+    d = request.json
+    user_name = d["user"]
+    match_id = d["match_id"]
+    choix = d["choix"]
+    devise = d["devise"]
+    montant = int(d["montant"])
+    users = load(DATA["USERS"])
+    user = next((u for u in users if u["nom"] == user_name), None)
+    if not user:
+        return {"error": "Utilisateur inconnu"}, 404
+    if user[devise] < montant:
+        return {"error": "Solde insuffisant"}, 400
+    paris = load(DATA["PARIS"])
+    if any(p for p in paris if p["user"] == user_name and p["match_id"] == match_id):
+        return {"error": "Déjà parié"}, 400
+    user[devise] -= montant
+    save(DATA["USERS"], users)
+    paris.append({
+        "user": user_name,
+        "match_id": match_id,
+        "choix": choix,
+        "mise": montant,
+        "devise": devise
+    })
+    save(DATA["PARIS"], paris)
+    return {"ok": True}
+
+@app.route("/add_resultat", methods=["POST"])
+def add_result():
+    r = request.json
+    resultats = load(DATA["RESULTS"])
+    resultats.append(r)
+    save(DATA["RESULTS"], resultats)
+    paris = load(DATA["PARIS"])
+    users = load(DATA["USERS"])
+    for p in paris:
+        if p["match_id"] == r["match_id"]:
+            if p["choix"] == r["gagnant"]:
+                user = next((u for u in users if u["nom"] == p["user"]), None)
+                if user:
+                    gain = p["mise"] * 2
+                    user[p["devise"]] += gain
+    save(DATA["USERS"], users)
+    socketio.emit("pub", f"Résultat publié pour {r['match_id']}")
+    return {"ok": True}
+
+@app.route("/get_resultat/<user>")
+def get_res(user):
+    paris = load(DATA["PARIS"])
+    resultats = load(DATA["RESULTS"])
+    matchs = load(DATA["MATCHS"])
+    retour = []
+    for p in paris:
+        if p["user"] == user:
+            match = next((m for m in matchs if m["id"] == p["match_id"]), None)
+            resultat = next((r for r in resultats if r["match_id"] == p["match_id"]), None)
+            if match and resultat:
+                etat = "gagné" if p["choix"] == resultat["gagnant"] else "perdu"
+                retour.append({
+                    "match": f'{match["equipe1"]} vs {match["equipe2"]}',
+                    "choix": p["choix"],
+                    "gagnant": resultat["gagnant"],
+                    "résultat": etat,
+                    "mise": p["mise"],
+                    "devise": p["devise"]
+                })
+    return jsonify(retour)
+
 @app.route("/add_article", methods=["POST"])
 def add_article():
     article = request.json
     shop = load(DATA["SHOP"])
     article["id"] = f"art_{len(shop)+1}"
 
-    if "quantite" not in article:
-        article["quantite"] = 1
-
-    if "image" in article:
+    # Traitement image base64
+    if "image" in article and article["image"]:
         try:
             img_data = base64.b64decode(article["image"])
             filename = f"image_{int(time.time())}.png"
             filepath = os.path.join(UPLOAD_FOLDER, filename)
             with open(filepath, "wb") as f:
                 f.write(img_data)
-            # URL HTTPS correcte pour accéder à l'image
-            base_url = request.url_root.rstrip('/')
-            article["image"] = f"{base_url}/static/images/{filename}"
+            article["image"] = f"{request.url_root}static/images/{filename}"
         except Exception as e:
             return {"error": "Image invalide", "details": str(e)}, 400
 
-    if "prix" in article and not ("prix_fc" in article or "prix_usd" in article):
-        article["prix_fc"] = int(article["prix"])
-        article["prix_usd"] = int(article["prix"])
+    # Correction affichage prix USD et FC
+    prix_usd = article.get("prix_usd")
+    prix_fc = article.get("prix_fc")
+
+    if prix_usd is not None:
+        article["prix_usd"] = int(prix_usd)
+    else:
+        article["prix_usd"] = 0
+
+    if prix_fc is not None:
+        article["prix_fc"] = int(prix_fc)
+    else:
+        article["prix_fc"] = 0
 
     shop.append(article)
     save(DATA["SHOP"], shop)
@@ -126,7 +215,6 @@ def acheter():
     user = data.get("user")
     article_id = data.get("article_id")
     devise = data.get("devise")
-    adresse_client = data.get("adresse", {})
 
     if not user or not article_id or devise not in ["usd", "fc"]:
         return jsonify({"error": "Requête invalide"}), 400
@@ -141,154 +229,19 @@ def acheter():
     if not article:
         return jsonify({"error": "Article introuvable"}), 404
 
-    prix = article.get(f"prix_{devise}", None)
-    if prix is None:
-        return jsonify({"error": f"Prix non défini pour {devise.upper()}"}), 400
-
-    prix = int(prix)
+    prix = article.get(f"prix_{devise}", 0)
     solde = user_data.get(devise, 0)
+
     if solde < prix:
         return jsonify({"error": f"Solde insuffisant en {devise.upper()}"}), 400
 
-    # Débit solde
     user_data[devise] -= prix
-
-    # Mise à jour adresse
-    if adresse_client:
-        user_data["adresse"] = {
-            "commune": adresse_client.get("commune", "N/A"),
-            "quartier": adresse_client.get("quartier", "N/A"),
-            "avenue": adresse_client.get("avenue", "N/A"),
-            "latitude": adresse_client.get("latitude", "N/A"),
-            "longitude": adresse_client.get("longitude", "N/A")
-        }
-
     save(DATA["USERS"], users)
-
-    # Création du reçu
-    recus = load(DATA["RECUS"])
-    recu = {
-        "id": f"recu_{len(recus)+1}",
-        "user": user,
-        "article": article,
-        "devise": devise,
-        "montant": prix,
-        "timestamp": int(time.time()),
-        "livre": False,
-        "adresse": {
-            "commune": adresse_client.get("commune") or user_data["adresse"].get("commune", "N/A"),
-            "quartier": adresse_client.get("quartier") or user_data["adresse"].get("quartier", "N/A"),
-            "avenue": adresse_client.get("avenue") or user_data["adresse"].get("avenue", "N/A"),
-            "latitude": adresse_client.get("latitude") or user_data["adresse"].get("latitude", "N/A"),
-            "longitude": adresse_client.get("longitude") or user_data["adresse"].get("longitude", "N/A")
-        }
-    }
-    recus.append(recu)
-    save(DATA["RECUS"], recus)
-
-    # Mise à jour quantité article
-    if "quantite" in article:
-        article["quantite"] -= 1
-        if article["quantite"] <= 0:
-            shop = [a for a in shop if a["id"] != article_id]
-        else:
-            for i in range(len(shop)):
-                if shop[i]["id"] == article_id:
-                    shop[i] = article
-        save(DATA["SHOP"], shop)
-
-    return jsonify({"message": "Article acheté avec succès", "recu": recu}), 200
-
-@app.route("/get_recus")
-def get_all_recus():
-    recus = load(DATA["RECUS"])
-    cleaned = []
-    for r in recus:
-        adresse = r.get("adresse", {})
-        cleaned.append({
-            "id": r["id"],
-            "acheteur": r["user"],
-            "article": r["article"].get("description", "Non spécifié") if isinstance(r["article"], dict) else str(r["article"]),
-            "montant": r["montant"],
-            "devise": r["devise"],
-            "livre": r.get("livre", False),
-            "adresse": {
-                "commune": adresse.get("commune", "N/A"),
-                "quartier": adresse.get("quartier", "N/A"),
-                "avenue": adresse.get("avenue", "N/A"),
-                "latitude": adresse.get("latitude", "N/A"),
-                "longitude": adresse.get("longitude", "N/A")
-            }
-        })
-    return jsonify(cleaned)
-
-@app.route("/get_recus/<nom>")
-def get_recus_par_nom(nom):
-    all_recus = load(DATA["RECUS"])
-    user_recus = [r for r in all_recus if r["user"] == nom]
-    return jsonify(user_recus)
-
-@app.route("/confirmer_livraison", methods=["POST"])
-def confirmer_livraison():
-    id_recu = request.json.get("id")
-    if not id_recu:
-        return {"error": "ID requis"}, 400
-    recus = load(DATA["RECUS"])
-    for r in recus:
-        if r.get("id") == id_recu:
-            r["livre"] = True
-            save(DATA["RECUS"], recus)
-            return {"message": "Livraison confirmée"}, 200
-    return {"error": "Reçu introuvable"}, 404
-
-@app.route("/envoyer_position", methods=["POST"])
-def envoyer_position():
-    data = request.get_json()
-    client = data.get("client")
-    latitude = data.get("latitude")
-    longitude = data.get("longitude")
-
-    if not all([client, latitude, longitude]):
-        return {"error": "Données incomplètes"}, 400
-
-    payload = {
-        "client": client,
-        "latitude": latitude,
-        "longitude": longitude
-    }
-
-    socketio.emit("position_client", payload)
-
-    return {"message": "Coordonnées envoyées au vendeur"}, 200
-
-@app.route("/update_adresse", methods=["POST"])
-def update_adresse():
-    data = request.json
-    nom = data.get("nom")
-    commune = data.get("commune")
-    quartier = data.get("quartier")
-    avenue = data.get("avenue")
-
-    if not nom:
-        return {"error": "Nom requis"}, 400
-
-    users = load(DATA["USERS"])
-    user = next((u for u in users if u["nom"] == nom), None)
-    if not user:
-        return {"error": "Utilisateur introuvable"}, 404
-
-    user["adresse"] = {
-        "commune": commune or "N/A",
-        "quartier": quartier or "N/A",
-        "avenue": avenue or "N/A"
-    }
-
-    save(DATA["USERS"], users)
-    return {"message": "Adresse mise à jour"}, 200
+    return jsonify({"message": "Article acheté avec succès"}), 200
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    print(f"Démarrage serveur sur le port {port} ...")
-    socketio.run(app, host="0.0.0.0", port=port, allow_unsafe_werkzeug=True)
-    
+    socketio.run(app, host="0.0.0.0", port=port)
+
+
 
