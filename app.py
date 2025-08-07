@@ -56,7 +56,7 @@ def register():
     users = load(DATA["USERS"])
     if any(u["nom"] == nom for u in users):
         return {"message": "Déjà inscrit"}, 200
-    users.append({"nom": nom, "age": age, "fc": 0, "usd": 0})
+    users.append({"nom": nom, "age": age, "fc": 0, "usd": 0, "adresse": {}})
     save(DATA["USERS"], users)
     return {"message": f"Bienvenue {nom}"}, 201
 
@@ -120,6 +120,7 @@ def acheter():
     user = data.get("user")
     article_id = data.get("article_id")
     devise = data.get("devise")
+    adresse_client = data.get("adresse", {})
 
     if not user or not article_id or devise not in ["usd", "fc"]:
         return jsonify({"error": "Requête invalide"}), 400
@@ -128,6 +129,17 @@ def acheter():
     user_data = next((u for u in users if u["nom"] == user), None)
     if not user_data:
         return jsonify({"error": "Utilisateur introuvable"}), 404
+
+    # ✅ Met à jour l'adresse avec commune, quartier, avenue, latitude, longitude
+    if adresse_client:
+        user_data["adresse"] = {
+            "commune": adresse_client.get("commune", "N/A"),
+            "quartier": adresse_client.get("quartier", "N/A"),
+            "avenue": adresse_client.get("avenue", "N/A"),
+            "latitude": adresse_client.get("latitude", "N/A"),
+            "longitude": adresse_client.get("longitude", "N/A")
+        }
+        save(DATA["USERS"], users)
 
     shop = load(DATA["SHOP"])
     article = next((a for a in shop if a["id"] == article_id), None)
@@ -147,6 +159,8 @@ def acheter():
     user_data[devise] -= prix
     save(DATA["USERS"], users)
 
+    adresse = user_data.get("adresse", {})
+
     recus = load(DATA["RECUS"])
     recu = {
         "id": f"recu_{len(recus)+1}",
@@ -155,7 +169,14 @@ def acheter():
         "devise": devise,
         "montant": prix,
         "timestamp": int(time.time()),
-        "livre": False
+        "livre": False,
+        "adresse": {
+            "commune": adresse.get("commune", "N/A"),
+            "quartier": adresse.get("quartier", "N/A"),
+            "avenue": adresse.get("avenue", "N/A"),
+            "latitude": adresse.get("latitude", "N/A"),
+            "longitude": adresse.get("longitude", "N/A")
+        }
     }
     recus.append(recu)
     save(DATA["RECUS"], recus)
@@ -178,20 +199,27 @@ def get_recus(nom):
     user_recus = [r for r in all_recus if r["user"] == nom]
     return jsonify(user_recus)
 
-# ✅✅ Partie corrigée ici
 @app.route("/get_recus")
 def get_all_recus():
     recus = load(DATA["RECUS"])
     cleaned = []
 
     for r in recus:
+        adresse = r.get("adresse", {})
         cleaned.append({
             "id": r["id"],
             "acheteur": r["user"],
             "article": r["article"].get("description", "Non spécifié") if isinstance(r["article"], dict) else str(r["article"]),
             "montant": r["montant"],
             "devise": r["devise"],
-            "livre": r.get("livre", False)
+            "livre": r.get("livre", False),
+            "adresse": {
+                "commune": adresse.get("commune", "N/A"),
+                "quartier": adresse.get("quartier", "N/A"),
+                "avenue": adresse.get("avenue", "N/A"),
+                "latitude": adresse.get("latitude", "N/A"),
+                "longitude": adresse.get("longitude", "N/A")
+            }
         })
 
     return jsonify(cleaned)
@@ -209,8 +237,26 @@ def confirmer_livraison():
             return {"message": "Livraison confirmée"}, 200
     return {"error": "Reçu introuvable"}, 404
 
+@app.route("/envoyer_position", methods=["POST"])
+def envoyer_position():
+    data = request.get_json()
+    client = data.get("client")
+    latitude = data.get("latitude")
+    longitude = data.get("longitude")
+
+    if not all([client, latitude, longitude]):
+        return {"error": "Données incomplètes"}, 400
+
+    payload = {
+        "client": client,
+        "latitude": latitude,
+        "longitude": longitude
+    }
+
+    socketio.emit("position_client", payload)
+
+    return {"message": "Coordonnées envoyées au vendeur"}, 200
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port)
-
-
