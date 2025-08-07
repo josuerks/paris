@@ -3,11 +3,9 @@ eventlet.monkey_patch()
 
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO
-from flask_cors import CORS
 import json, os, base64, time
 
 app = Flask(__name__)
-CORS(app)  # Active CORS pour toutes les routes
 app.config["SECRET_KEY"] = "secret!"
 socketio = SocketIO(app, cors_allowed_origins="*")
 
@@ -176,6 +174,7 @@ def add_article():
     shop = load(DATA["SHOP"])
     article["id"] = f"art_{len(shop)+1}"
 
+    # Traitement image base64
     if "image" in article and article["image"]:
         try:
             img_data = base64.b64decode(article["image"])
@@ -187,8 +186,19 @@ def add_article():
         except Exception as e:
             return {"error": "Image invalide", "details": str(e)}, 400
 
-    article["prix_usd"] = int(article.get("prix_usd", 0))
-    article["prix_fc"] = int(article.get("prix_fc", 0))
+    # Correction affichage prix USD et FC
+    prix_usd = article.get("prix_usd")
+    prix_fc = article.get("prix_fc")
+
+    if prix_usd is not None:
+        article["prix_usd"] = int(prix_usd)
+    else:
+        article["prix_usd"] = 0
+
+    if prix_fc is not None:
+        article["prix_fc"] = int(prix_fc)
+    else:
+        article["prix_fc"] = 0
 
     shop.append(article)
     save(DATA["SHOP"], shop)
@@ -232,3 +242,6 @@ def acheter():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port)
+
+
+
