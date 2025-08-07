@@ -18,7 +18,6 @@ DATA = {
     "RECUS": "recus.json"
 }
 
-# Initialisation des fichiers vides
 for f in DATA.values():
     if not os.path.exists(f):
         with open(f, "w") as fp:
@@ -135,26 +134,24 @@ def acheter():
     if not article:
         return jsonify({"error": "Article introuvable"}), 404
 
-    prix = article.get(f"prix_{devise}")
+    prix = article.get(f"prix_{devise}", None)
     if prix is None:
         return jsonify({"error": f"Prix non défini pour {devise.upper()}"}), 400
 
     prix = int(prix)
     solde = user_data.get(devise, 0)
+
     if solde < prix:
         return jsonify({"error": f"Solde insuffisant en {devise.upper()}"}), 400
 
     user_data[devise] -= prix
     save(DATA["USERS"], users)
 
-    # ✅ Reçu avec image et titre
     recus = load(DATA["RECUS"])
     recu = {
         "id": f"recu_{len(recus)+1}",
         "user": user,
-        "acheteur": user,
-        "nom_article": article.get("nom", "Article"),
-        "image": article.get("image", ""),
+        "article": article,
         "devise": devise,
         "montant": prix,
         "timestamp": int(time.time()),
@@ -181,9 +178,23 @@ def get_recus(nom):
     user_recus = [r for r in all_recus if r["user"] == nom]
     return jsonify(user_recus)
 
+# ✅✅ Partie corrigée ici
 @app.route("/get_recus")
 def get_all_recus():
-    return jsonify(load(DATA["RECUS"]))
+    recus = load(DATA["RECUS"])
+    cleaned = []
+
+    for r in recus:
+        cleaned.append({
+            "id": r["id"],
+            "acheteur": r["user"],
+            "article": r["article"].get("description", "Non spécifié") if isinstance(r["article"], dict) else str(r["article"]),
+            "montant": r["montant"],
+            "devise": r["devise"],
+            "livre": r.get("livre", False)
+        })
+
+    return jsonify(cleaned)
 
 @app.route("/confirmer_livraison", methods=["POST"])
 def confirmer_livraison():
@@ -201,4 +212,5 @@ def confirmer_livraison():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port)
+
 
